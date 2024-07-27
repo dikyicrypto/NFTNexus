@@ -1,0 +1,83 @@
+import requests
+import pandas as pd
+import matplotlib.pyplot as plt
+from datetime import datetime
+
+class NFTNexus:
+    def __init__(self, opensea_api_url: str = 'https://api.opensea.io/api/v1'):
+        self.api_url = opensea_api_url
+
+    def get_nft_details(self, asset_contract_address: str, token_id: str) -> dict:
+        url = f"{self.api_url}/asset/{asset_contract_address}/{token_id}"
+        response = requests.get(url)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return {"error": "NFT not found"}
+
+    def get_nft_price_history(self, asset_contract_address: str, token_id: str) -> pd.DataFrame:
+        url = f"{self.api_url}/events?asset_contract_address={asset_contract_address}&token_id={token_id}&event_type=successful"
+        response = requests.get(url)
+        data = response.json()
+
+        if 'asset_events' not in data:
+            return pd.DataFrame()
+
+        prices = []
+        for event in data['asset_events']:
+            prices.append({
+                'timestamp': datetime.strptime(event['transaction']['timestamp'], "%Y-%m-%dT%H:%M:%S"),
+                'price': float(event['total_price']) / 1e18  # Convert wei to ether
+            })
+        
+        return pd.DataFrame(prices)
+
+    def plot_price_history(self, asset_contract_address: str, token_id: str):
+        df = self.get_nft_price_history(asset_contract_address, token_id)
+        if df.empty:
+            print("No price history available for this NFT.")
+            return
+
+        plt.figure(figsize=(12, 6))
+        plt.plot(df['timestamp'], df['price'])
+        plt.title(f'Price History for NFT {token_id}')
+        plt.xlabel('Date')
+        plt.ylabel('Price (ETH)')
+        plt.grid(True)
+        plt.show()
+
+    def get_nft_transaction_history(self, asset_contract_address: str, token_id: str) -> pd.DataFrame:
+        url = f"{self.api_url}/events?asset_contract_address={asset_contract_address}&token_id={token_id}"
+        response = requests.get(url)
+        data = response.json()
+
+        if 'asset_events' not in data:
+            return pd.DataFrame()
+
+        transactions = []
+        for event in data['asset_events']:
+            transactions.append({
+                'timestamp': datetime.strptime(event['transaction']['timestamp'], "%Y-%m-%dT%H:%M:%S"),
+                'event_type': event['event_type'],
+                'price': float(event['total_price']) / 1e18 if event['total_price'] else None  # Convert wei to ether
+            })
+        
+        return pd.DataFrame(transactions)
+
+# Example Usage
+if __name__ == "__main__":
+    nft_nexus = NFTNexus()
+
+    # Fetch NFT Details
+    asset_contract_address = '0xYourContractAddressHere'
+    token_id = 'YourTokenIdHere'
+    nft_details = nft_nexus.get_nft_details(asset_contract_address, token_id)
+    print("NFT Details:", nft_details)
+
+    # Fetch and Plot Price History
+    nft_nexus.plot_price_history(asset_contract_address, token_id)
+
+    # Fetch Transaction History
+    transaction_history = nft_nexus.get_nft_transaction_history(asset_contract_address, token_id)
+    print("Transaction History:")
+    print(transaction_history)
